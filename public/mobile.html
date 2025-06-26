@@ -1,4 +1,4 @@
-<!-- ✅ public/mobile.html (Gyroscope Controller) -->
+<!-- ✅ public/mobile.html (Improved Gyroscope Controller) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -29,21 +29,39 @@
     const status = document.getElementById('status');
     const pathParts = window.location.pathname.split('/');
     const desktopId = pathParts[2] || null;
-    const socket = io(); // Update if needed
+    const socket = io();
 
     socket.on('connect', () => {
       status.textContent = 'Connected';
       socket.emit('register', desktopId);
     });
 
-    // Gyroscope support
+    // Throttle utility
+    function throttle(fn, limit) {
+      let lastCall = 0;
+      return function (...args) {
+        const now = Date.now();
+        if (now - lastCall >= limit) {
+          lastCall = now;
+          fn(...args);
+        }
+      };
+    }
+
+    // ✅ Gyroscope support with better range/smoothing
+    const throttledEmit = throttle((x) => {
+      socket.emit("sliderMove", { x });
+    }, 50); // ~20 FPS
+
     window.addEventListener("deviceorientation", (event) => {
-      const gamma = event.gamma; // Left/right tilt
-      if (gamma !== null) {
-        // Normalize gamma (-90 to 90) => (0 to 1)
-        let x = (gamma + 90) / 180;
-        x = Math.max(0, Math.min(1, x));
-        socket.emit("sliderMove", { x });
+      const gamma = event.gamma;
+
+      if (typeof gamma === "number") {
+        // Map from -30° to 30° to 0 - 1
+        const limitedGamma = Math.max(-30, Math.min(30, gamma));
+        let x = (limitedGamma + 30) / 60;
+
+        throttledEmit(x);
       }
     });
   </script>
