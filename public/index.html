@@ -1,0 +1,51 @@
+<!-- ✅ public/mobile.html (Gyroscope Controller) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Ball Catcher Controller</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #c3cfe2, #a8edea);
+      font-family: sans-serif;
+    }
+    h1 { color: #333; margin-bottom: 20px; }
+    #status { margin-top: 20px; color: #333; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Ball Catcher Gyro Controller</h1>
+  <div id="status">Connecting...</div>
+
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script>
+    const status = document.getElementById('status');
+    const pathParts = window.location.pathname.split('/');
+    const desktopId = pathParts[2] || null;
+    const socket = io(); // Update if needed
+
+    socket.on('connect', () => {
+      status.textContent = 'Connected';
+      socket.emit('register', desktopId);
+    });
+
+    // Gyroscope support
+    window.addEventListener("deviceorientation", (event) => {
+      const gamma = event.gamma; // Left/right tilt
+      if (gamma !== null) {
+        // Normalize gamma (-90 to 90) => (0 to 1)
+        let x = (gamma + 90) / 180;
+        x = Math.max(0, Math.min(1, x));
+        socket.emit("sliderMove", { x });
+      }
+    });
+  </script>
+</body>
+</html>
