@@ -1,55 +1,120 @@
-<script>
-  const status = document.getElementById('status');
-  const pathParts = window.location.pathname.split('/');
-  const desktopId = pathParts[2] || null;
-  const socket = io();
+<!-- ✅ public/mobile.html (Improved Gyroscope Controller with Landscape Support) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Ball Catcher Controller</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #c3cfe2, #a8edea);
+      font-family: sans-serif;
+      text-align: center;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    #status {
+      margin-top: 20px;
+      color: #333;
+      font-size: 16px;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      background: #4caf50;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ball Catcher Gyro Controller</h1>
+  <div id="status">Tap to enable motion control</div>
+  <button onclick="requestGyroPermission()">Enable Motion</button>
 
-  socket.on('connect', () => {
-    status.textContent = 'Connected';
-    socket.emit('register', desktopId);
-  });
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script>
+    const status = document.getElementById('status');
+    const pathParts = window.location.pathname.split('/');
+    const desktopId = pathParts[2] || null;
+    const socket = io();
 
-  // Throttle utility
-  function throttle(fn, limit) {
-    let lastCall = 0;
-    return function (...args) {
-      const now = Date.now();
-      if (now - lastCall >= limit) {
-        lastCall = now;
-        fn(...args);
+    socket.on('connect', () => {
+      status.textContent = 'Connected to server';
+      socket.emit('register', desktopId);
+    });
+
+    socket.on('disconnect', () => {
+      status.textContent = 'Disconnected';
+    });
+
+    function throttle(fn, limit) {
+      let lastCall = 0;
+      return function (...args) {
+        const now = Date.now();
+        if (now - lastCall >= limit) {
+          lastCall = now;
+          fn(...args);
+        }
+      };
+    }
+
+    const throttledEmit = throttle((x) => {
+      socket.emit("sliderMove", { x });
+    }, 50); // 20 FPS
+
+    function getOrientationMode() {
+      const type = screen.orientation?.type;
+      if (type) return type.includes('landscape') ? 'landscape' : 'portrait';
+
+      const angle = window.orientation;
+      if (typeof angle === 'number') {
+        return (angle === 90 || angle === -90) ? 'landscape' : 'portrait';
       }
-    };
-  }
 
-  // Emit sliderMove
-  const throttledEmit = throttle((x) => {
-    socket.emit("sliderMove", { x });
-  }, 50); // 20 FPS
+      return 'portrait'; // default fallback
+    }
 
-  function getOrientation() {
-    const orientation = screen.orientation || screen.mozOrientation || screen.msOrientation;
-    if (!orientation) return 'portrait'; // Fallback
-    return orientation.type.includes('landscape') ? 'landscape' : 'portrait';
-  }
+    function handleOrientation(event) {
+      const mode = getOrientationMode();
+      let tilt = mode === 'landscape' ? event.beta : event.gamma;
 
-  window.addEventListener("deviceorientation", (event) => {
-    let tilt;
-    let orientation = getOrientation();
-
-    if (orientation === "landscape") {
-      tilt = event.beta; // left/right in landscape
-      if (typeof tilt === "number") {
-        tilt = Math.max(-30, Math.min(30, tilt));
-        const x = (tilt + 30) / 60;
-        throttledEmit(x);
-      }
-    } else {
-      tilt = event.gamma; // left/right in portrait
-      if (typeof tilt === "number") {
+      if (typeof tilt === 'number') {
         tilt = Math.max(-30, Math.min(30, tilt));
         const x = (tilt + 30) / 60;
         throttledEmit(x);
       }
     }
-  });
-</script>
+
+    function requestGyroPermission() {
+      if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(response => {
+          if (response === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+            status.textContent = 'Motion control enabled';
+          } else {
+            status.textContent = 'Permission denied';
+          }
+        }).catch(err => {
+          status.textContent = 'Motion permission error';
+          console.error(err);
+        });
+      } else {
+        // No permission required (non-iOS)
+        window.addEventListener('deviceorientation', handleOrientation);
+        status.textContent = 'Motion control enabled';
+      }
+    }
+  </script>
+</body>
+</html>
