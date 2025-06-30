@@ -13,7 +13,7 @@
 
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: radial-gradient(circle, #ffe135 0%, #f8c800 100%);
+      background: radial-gradient(circle, #ffe135 20%, #f8c800 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -97,137 +97,111 @@
   </div>
 
   <button id="start-btn">Start Game</button>
-
   <div id="status">Connecting...</div>
 
   <!-- Game Form Screen (hidden by default) -->
-<div id="form-screen" style="display: none; flex-direction: column; align-items: center;">
-  <img src="crown.png" style="width: 100px; margin-bottom: 20px;" />
-  <p style="font-size: 18px; font-weight: bold;">Enter your Name<br>and Mobile Number<br>to receive your coupon instantly.</p>
-
-  <input id="nameInput" placeholder="Name" style="margin-top: 20px; padding: 10px; width: 80%; border: 1px solid #ccc; border-radius: 6px;" />
-  <input id="mobileInput" placeholder="Mobile Number" style="margin-top: 10px; padding: 10px; width: 80%; border: 1px solid #ccc; border-radius: 6px;" />
-
-  <button id="submitForm" style="margin-top: 20px; padding: 10px 30px; background: #b50000; color: white; border: none; border-radius: 6px;">Submit</button>
-</div>
-
+  <div id="form-screen" style="display: none; flex-direction: column; align-items: center;">
+    <img src="crown.png" style="width: 100px; margin-bottom: 20px;" />
+    <p style="font-size: 18px; font-weight: bold;">Enter your Name<br>and Mobile Number<br>to receive your coupon instantly.</p>
+    <input id="nameInput" placeholder="Name" style="margin-top: 20px; padding: 10px; width: 80%; border: 1px solid #ccc; border-radius: 6px;" />
+    <input id="mobileInput" placeholder="Mobile Number" style="margin-top: 10px; padding: 10px; width: 80%; border: 1px solid #ccc; border-radius: 6px;" />
+    <button id="submitForm" style="margin-top: 20px; padding: 10px 30px; background: #b50000; color: white; border: none; border-radius: 6px;">Submit</button>
+  </div>
 
   <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
-<script>
-  const status = document.getElementById('status');
-  const pathParts = window.location.pathname.split('/');
-  const desktopId = pathParts[2] || null;
+  <script>
+    const status = document.getElementById('status');
+    const pathParts = window.location.pathname.split('/');
+    const desktopId = pathParts[2] || null;
+    const socket = io();
 
-  let socket;
+    if (!desktopId) {
+      status.textContent = '❌ Invalid URL - no desktop ID';
+      status.style.color = 'red';
+      throw new Error('Missing desktop ID in URL');
+    }
 
-  if (!desktopId) {
-    status.textContent = '❌ Invalid URL - no desktop ID';
-    status.style.color = 'red';
-    throw new Error('Missing desktop ID in URL');
-  }
+    socket.on('connect', () => {
+      status.textContent = '✅ Connected';
+      status.style.color = 'green';
+      socket.emit('register', desktopId);
+    });
 
-  socket = io();
+    socket.on('disconnect', () => {
+      status.textContent = '❌ Disconnected';
+      status.style.color = 'red';
+    });
 
-  socket.on('connect', () => {
-    status.textContent = '✅ Connected';
-    status.style.color = 'green';
-    socket.emit('register', desktopId);
-  });
+    // Smooth throttle utility (20 FPS)
+    function throttle(fn, limit) {
+      let lastCall = 0;
+      return function (...args) {
+        const now = Date.now();
+        if (now - lastCall >= limit) {
+          lastCall = now;
+          fn(...args);
+        }
+      };
+    }
 
-  socket.on('disconnect', () => {
-    status.textContent = '❌ Disconnected';
-    status.style.color = 'red';
-  });
+    function getOrientationMode() {
+      const type = screen.orientation?.type;
+      if (type) return type.includes('landscape') ? 'landscape' : 'portrait';
 
-  function throttle(fn, delay) {
-    let lastCall = 0;
-    return (...args) => {
-      const now = Date.now();
-      if (now - lastCall >= delay) {
-        lastCall = now;
-        fn(...args);
+      const angle = window.orientation;
+      if (typeof angle === 'number') {
+        return (angle === 90 || angle === -90) ? 'landscape' : 'portrait';
       }
-    };
-  }
 
-  // const handleOrientation = throttle((event) => {
-  //   let gamma = event.gamma;
-  //   let normalized = (gamma + 90) / 180;
-  //   normalized = Math.max(0, Math.min(1, normalized));
-  // socket.emit('sliderMove', { x: normalized, y: 0 }); 
+      return 'portrait'; // fallback
+    }
 
-  // }, 33);
+    const handleOrientation = throttle((event) => {
+      const mode = getOrientationMode();
+      let tilt = mode === 'landscape' ? event.beta : event.gamma;
 
-  const handleOrientation = throttle((event) => {
-  let angle;
-  const orientation = window.screen.orientation || window.orientation;
+      if (typeof tilt === 'number') {
+        tilt = Math.max(-30, Math.min(30, tilt));
+        const normalized = (tilt + 30) / 60;
+        socket.emit("sliderMove", { x: normalized });
+      }
+    }, 50); // 20 FPS
 
-  // Use correct tilt axis depending on orientation
-  if (orientation && (orientation.type === "landscape-primary" || orientation.type === "landscape-secondary")) {
-    angle = event.beta; // Forward/backward tilt in landscape → map to horizontal
-  } else {
-    angle = event.gamma; // Left/right tilt in portrait → map to horizontal
-  }
-
-  // Normalize the angle to 0–1 range
-  let normalized = (angle + 90) / 180;
-  normalized = Math.max(0, Math.min(1, normalized));
-
-  // Emit sliderMove
-  socket.emit("sliderMove", { x: normalized, y: 0 });
-
-  // Optional: debug output
-  // console.log("Orientation angle:", angle, "Normalized:", normalized);
-}, 33); // 30 FPS throttle
-
-
-  function initGyro() {
-    if (
-      typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function'
-    ) {
-      DeviceOrientationEvent.requestPermission()
-        .then((response) => {
+    function initGyro() {
+      if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(response => {
           if (response === 'granted') {
             window.addEventListener('deviceorientation', handleOrientation);
-            status.textContent = '📱 Gyroscope activated';
+            status.textContent = '📱 Motion control enabled';
           } else {
             status.textContent = '⚠️ Permission denied';
             status.style.color = 'orange';
           }
-        })
-        .catch(console.error);
-    } else {
-      window.addEventListener('deviceorientation', handleOrientation);
-      status.textContent = '📱 Gyroscope active';
+        }).catch(err => {
+          status.textContent = 'Motion permission error';
+          console.error(err);
+        });
+      } else {
+        window.addEventListener('deviceorientation', handleOrientation);
+        status.textContent = '📱 Motion control enabled';
+      }
     }
-  }
 
-  // 🚀 Start Game button logic
-  function onStartButtonClick() {
-    initGyro();
-    socket.emit("startGame"); // 🔥 emits event to desktop
-  }
+    document.getElementById("start-btn").addEventListener("click", () => {
+      initGyro();
+      socket.emit("startGame");
+    });
 
-  document.getElementById("start-btn").addEventListener("click", onStartButtonClick);
-
-
-  // ✅ Listen for showForm event from server
-socket.on("showForm", () => {
-  const formScreen = document.getElementById("form-screen");
-  const children = Array.from(document.body.children);
-
-  // Hide everything else except the form screen
-  for (let el of children) {
-    if (el !== formScreen && el.tagName !== "SCRIPT") {
-      el.style.display = "none";
-    }
-  }
-
-  formScreen.style.display = "flex";
-});
-
-</script>
-
+    socket.on("showForm", () => {
+      const formScreen = document.getElementById("form-screen");
+      const children = Array.from(document.body.children);
+      for (let el of children) {
+        if (el !== formScreen && el.tagName !== "SCRIPT") {
+          el.style.display = "none";
+        }
+      }
+      formScreen.style.display = "flex";
+    });
+  </script>
 </body>
 </html>
