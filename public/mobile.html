@@ -150,13 +150,36 @@
     };
   }
 
-  const handleOrientation = throttle((event) => {
-    let gamma = event.gamma;
-    let normalized = (gamma + 90) / 180;
-    normalized = Math.max(0, Math.min(1, normalized));
-  socket.emit('sliderMove', { x: normalized, y: 0 }); 
+  // const handleOrientation = throttle((event) => {
+  //   let gamma = event.gamma;
+  //   let normalized = (gamma + 90) / 180;
+  //   normalized = Math.max(0, Math.min(1, normalized));
+  // socket.emit('sliderMove', { x: normalized, y: 0 }); 
 
-  }, 33);
+  // }, 33);
+
+  const handleOrientation = throttle((event) => {
+  let angle;
+  const orientation = window.screen.orientation || window.orientation;
+
+  // Use correct tilt axis depending on orientation
+  if (orientation && (orientation.type === "landscape-primary" || orientation.type === "landscape-secondary")) {
+    angle = event.beta; // Forward/backward tilt in landscape → map to horizontal
+  } else {
+    angle = event.gamma; // Left/right tilt in portrait → map to horizontal
+  }
+
+  // Normalize the angle to 0–1 range
+  let normalized = (angle + 90) / 180;
+  normalized = Math.max(0, Math.min(1, normalized));
+
+  // Emit sliderMove
+  socket.emit("sliderMove", { x: normalized, y: 0 });
+
+  // Optional: debug output
+  // console.log("Orientation angle:", angle, "Normalized:", normalized);
+}, 33); // 30 FPS throttle
+
 
   function initGyro() {
     if (
