@@ -154,7 +154,8 @@
     let gamma = event.gamma;
     let normalized = (gamma + 90) / 180;
     normalized = Math.max(0, Math.min(1, normalized));
-    socket.emit('sliderMove', { x: normalized * 100, y: 0 });
+  socket.emit('sliderMove', { x: normalized, y: 0 }); 
+
   }, 33);
 
   function initGyro() {
